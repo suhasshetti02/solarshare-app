@@ -13,13 +13,7 @@ import {
 } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyA8DTDJyU5Rf45eCoI3FcsFxmkpZQzm4eY",
-  authDomain: "smart-grid-dev2.firebaseapp.com",
-  projectId: "smart-grid-dev2",
-  storageBucket: "smart-grid-dev2.firebasestorage.app",
-  messagingSenderId: "851224488887",
-  appId: "1:851224488887:web:c9245511394dbcc1de9632",
-  measurementId: "G-938EMYZ5PY"
+  //firebase config
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
