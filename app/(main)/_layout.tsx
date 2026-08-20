@@ -20,6 +20,7 @@ const ICONS: Record<string, { on: IoniconsName; off: IoniconsName }> = {
   Pricing: { on: 'pricetag', off: 'pricetag-outline' },
   Wallet: { on: 'wallet', off: 'wallet-outline' },
   History: { on: 'time', off: 'time-outline' },
+  System: { on: 'hardware-chip', off: 'hardware-chip-outline' },
 };
 
 const TabIcon = ({
@@ -108,6 +109,15 @@ export default function MainLayout() {
           title: 'History',
           tabBarIcon: ({ focused }) => (
             <TabIcon label="History" focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="system"
+        options={{
+          title: 'System',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon label="System" focused={focused} />
           ),
         }}
       />
