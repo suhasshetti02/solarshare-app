@@ -102,7 +102,7 @@ export async function startTransfer(requestId: string): Promise<void> {
   await updateDoc(doc(db, COL, requestId), { status: "transferring" });
 }
 
-/** Atomically complete the transfer */
+/** Atomically complete the transfer - DEPRECATED for client side */
 export async function completeRequest(
   requestId: string,
   donorId: string,
@@ -111,77 +111,7 @@ export async function completeRequest(
   receiverHouseId: string,
   energyKwh: number
 ): Promise<void> {
-  await runTransaction(db, async (transaction) => {
-    const donorHouseRef = doc(db, "houses", donorHouseId);
-    const receiverHouseRef = doc(db, "houses", receiverHouseId);
-    const donorUserRef = doc(db, "users", donorId);
-    const receiverUserRef = doc(db, "users", receiverId);
-    const requestRef = doc(db, COL, requestId);
-
-    const [dH, rH, dU, rU, reqSnap] = await Promise.all([
-      transaction.get(donorHouseRef),
-      transaction.get(receiverHouseRef),
-      transaction.get(donorUserRef),
-      transaction.get(receiverUserRef),
-      transaction.get(requestRef),
-    ]);
-
-    if (!reqSnap.exists() || reqSnap.data().status !== "transferring") {
-      throw new Error("Request is not in transferring state.");
-    }
-    if (!dH.exists() || !rH.exists() || !dU.exists() || !rU.exists()) {
-      throw new Error("Missing user or house documents.");
-    }
-
-    const donorBattery = Number(dH.data().battery);          // stored as %
-    const donorReserve = Number(dU.data().reserveBatteryPercent ?? dH.data().reserve ?? 20); // %
-    
-    // Battery is stored as a percentage (0-100).
-    // We can't directly subtract kWh from a %, but we can check if there's
-    // enough headroom above the reserve. If battery is already at or below
-    // reserve, deny the transfer.
-    if (donorBattery <= donorReserve) {
-      throw new Error(`Donor battery (${donorBattery}%) is at or below reserve threshold (${donorReserve}%). Cannot transfer.`);
-    }
-
-    const pricePerKwh = 10;
-    const totalCost = energyKwh * pricePerKwh;
-    
-    const receiverWallet = Number(rU.data().walletBalance || 0);
-    if (receiverWallet < totalCost) {
-      throw new Error(`Receiver has insufficient funds. Needed: Rs. ${totalCost}`);
-    }
-
-    // 1. Update Batteries
-    transaction.update(donorHouseRef, { battery: donorBattery - energyKwh });
-    transaction.update(receiverHouseRef, { battery: Number(rH.data().battery) + energyKwh });
-
-    // 2. Update Wallets
-    transaction.update(donorUserRef, { walletBalance: Number(dU.data().walletBalance || 0) + totalCost });
-    transaction.update(receiverUserRef, { walletBalance: receiverWallet - totalCost });
-
-    // 3. Mark Request Completed
-    transaction.update(requestRef, { status: "completed" });
-
-    // 4. Create Transaction Record
-    const txRef = doc(collection(db, TX_COL));
-    transaction.set(txRef, {
-      requestId,
-      donorUserId: donorId,
-      receiverUserId: receiverId,
-      donor_id: donorId,
-      receiver_id: receiverId,
-      donor_display_name: dU.data().name || donorHouseId,
-      receiver_display_name: rU.data().name || receiverHouseId,
-      donorHouseId,
-      receiverHouseId,
-      energyKwh,
-      pricePerKwh,
-      totalCost,
-      status: "completed",
-      createdAt: serverTimestamp(),
-    });
-  });
+  throw new Error("Client cannot directly complete requests. This must be done via secure backend settlement based on hardware confirmation.");
 }
 
 export async function rejectRequest(requestId: string): Promise<void> {
@@ -398,141 +328,43 @@ export async function rejectOffer(offerId: string): Promise<void> {
 // ----------------------------------------------------
 
 export async function confirmPaymentAndStartTransfer(requestId: string, offerId: string, receiverId: string): Promise<string> {
-  const { getDoc } = await import('firebase/firestore');
-  const reqSnap = await getDoc(doc(db, "broadcast_requests", requestId));
-  const offerSnap = await getDoc(doc(db, "energy_offers", offerId));
-  const userSnap = await getDoc(doc(db, "users", receiverId));
-
-  if (!reqSnap.exists() || !offerSnap.exists() || !userSnap.exists()) {
-    throw new Error("Missing data for payment confirmation.");
+  // Step 1: Request order creation from backend
+  const backendUrl = "http://localhost:3000"; // Ensure this matches your ngrok or deployed backend URL in production
+  
+  const res = await fetch(`${backendUrl}/api/payment/create-order`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId, offerId, receiverId })
+  });
+  
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to create payment order on backend.");
   }
+  
+  const data = await res.json();
+  
+  // Step 2: Open Razorpay Checkout (PENDING SDK INTEGRATION)
+  // To complete the deployable project, the 'react-native-razorpay' package MUST be installed,
+  // which requires a custom Expo Dev Client build.
+  // 
+  // Example native code to be added:
+  // const options = {
+  //   description: 'Energy Transfer',
+  //   currency: data.currency,
+  //   key: data.keyId,
+  //   amount: data.amount * 100,
+  //   name: 'SolarShare',
+  //   order_id: data.orderId,
+  //   prefill: { contact: '', email: '' }
+  // };
+  // await RazorpayCheckout.open(options);
 
-  const reqData = reqSnap.data() as BroadcastRequest;
-  const offerData = offerSnap.data() as EnergyOffer;
-  const userData = userSnap.data();
-
-  const estimatedCost = offerData.energyOfferedKwh * offerData.pricePerKwh;
-  const balance = Number(userData.walletBalance || 0);
-
-  if (balance < estimatedCost) {
-    throw new Error("Insufficient Wallet Balance");
-  }
-
-  // Create transfer session
-  const sessionRef = await addDoc(collection(db, "transfer_sessions"), {
-    requestId,
-    offerId,
-    donorId: offerData.donorId,
-    donorDisplayName: offerData.donorDisplayName,
-    receiverId: reqData.receiverId,
-    receiverDisplayName: reqData.receiverDisplayName,
-    estimatedKwh: offerData.energyOfferedKwh,
-    estimatedCost,
-    status: "transferring",
-    switchingConfirmed: false,
-    transferStartedAt: serverTimestamp(),
-  });
-
-  // Update request to transferring
-  await updateDoc(doc(db, "broadcast_requests", requestId), {
-    status: "transferring"
-  });
-
-  // Notify donor
-  await addDoc(collection(db, "notifications"), {
-    userId: offerData.donorId,
-    title: 'Transfer Started',
-    body: `Payment confirmed. Energy transfer to ${reqData.receiverDisplayName} is starting.`,
-    read: false,
-    createdAt: serverTimestamp(),
-  });
-
-  // Phase 5: Hardware Command Queue
-  const { queueHardwareCommand } = await import('./hardwareService');
-  await queueHardwareCommand('START_TRANSFER', {
-    requestId: sessionRef.id,
-    donorId: offerData.donorId,
-    receiverId: reqData.receiverId,
-    energyKwh: offerData.energyOfferedKwh,
-  });
-
-  return sessionRef.id;
+  throw new Error(`Order ${data.orderId} created on backend! Native Razorpay SDK integration (react-native-razorpay) is required to proceed with actual checkout UI.`);
 }
 
 export async function completeTransferSession(sessionId: string): Promise<void> {
-  await runTransaction(db, async (transaction) => {
-    const sessionRef = doc(db, "transfer_sessions", sessionId);
-    const sessionSnap = await transaction.get(sessionRef);
-    if (!sessionSnap.exists()) throw new Error("Transfer session not found.");
-    
-    const sessionData = sessionSnap.data() as any;
-    if (sessionData.status === "completed") return; // already done
-    
-    const donorUserRef = doc(db, "users", sessionData.donorId);
-    const receiverUserRef = doc(db, "users", sessionData.receiverId);
-    const requestRef = doc(db, "broadcast_requests", sessionData.requestId);
-    
-    const [donorUserSnap, receiverUserSnap, reqSnap] = await Promise.all([
-      transaction.get(donorUserRef),
-      transaction.get(receiverUserRef),
-      transaction.get(requestRef),
-    ]);
-
-    if (!donorUserSnap.exists() || !receiverUserSnap.exists() || !reqSnap.exists()) {
-      throw new Error("Missing user or request data.");
-    }
-
-    const donorBalance = Number(donorUserSnap.data().walletBalance || 0);
-    const receiverBalance = Number(receiverUserSnap.data().walletBalance || 0);
-    const cost = Number(sessionData.estimatedCost || 0);
-    const energyKwh = Number(sessionData.estimatedKwh || 0);
-
-    // Atomic Wallet Updates
-    transaction.update(donorUserRef, { walletBalance: donorBalance + cost });
-    transaction.update(receiverUserRef, { walletBalance: receiverBalance - cost });
-
-    // Mark Session & Request Completed
-    transaction.update(sessionRef, { status: "completed", completedAt: serverTimestamp() });
-    transaction.update(requestRef, { status: "completed" });
-
-    // Create Transaction Record
-    const txRef = doc(collection(db, TX_COL));
-    transaction.set(txRef, {
-      donorUserId: sessionData.donorId,
-      donor_id: sessionData.donorId,
-      donor_display_name: sessionData.donorDisplayName,
-      receiverUserId: sessionData.receiverId,
-      receiver_id: sessionData.receiverId,
-      receiver_display_name: sessionData.receiverDisplayName,
-      energyKwh,
-      pricePerKwh: cost / (energyKwh || 1), // approximate
-      totalCost: cost,
-      transferSessionId: sessionId,
-      status: "completed",
-      createdAt: serverTimestamp(),
-    });
-  });
-
-  // Notifications
-  const { getDoc } = await import('firebase/firestore');
-  const sess = await getDoc(doc(db, "transfer_sessions", sessionId));
-  if (sess.exists()) {
-    const data = sess.data();
-    await addDoc(collection(db, "notifications"), {
-      userId: data.receiverId,
-      title: 'Transfer Completed',
-      body: `Successfully received ${data.estimatedKwh} kWh from ${data.donorDisplayName}.`,
-      read: false,
-      createdAt: serverTimestamp(),
-    });
-    await addDoc(collection(db, "notifications"), {
-      userId: data.donorId,
-      title: 'Payment Received',
-      body: `You earned ₹${data.estimatedCost} for transferring ${data.estimatedKwh} kWh.`,
-      read: false,
-      createdAt: serverTimestamp(),
-    });
-  }
+  throw new Error("Client cannot settle transactions directly. Settlement occurs safely on the backend once hardware emits TRANSFER_COMPLETED.");
 }
 
 export function subscribeActiveTransferSession(

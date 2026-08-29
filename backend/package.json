@@ -1,0 +1,17 @@
+{
+  "name": "solarshare-backend",
+  "version": "1.0.0",
+  "description": "Secure payment and hardware authorization backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.2",
+    "firebase-admin": "^12.7.0",
+    "razorpay": "^2.9.8"
+  }
+}

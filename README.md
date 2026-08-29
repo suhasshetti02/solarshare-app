@@ -1,6 +1,6 @@
 # Smart Grid Energy (SolarShare)
 
-A mobile application for real-time monitoring and peer-to-peer (P2P) trading within a smart grid energy network. Built with **React Native (Expo)** and **Firebase**, it features real-time power flow visualization and a decentralized marketplace for local energy sharing.
+A production-ready mobile application for real-time monitoring and peer-to-peer (P2P) trading within a smart grid energy network. Built with **React Native (Expo)**, **Firebase**, and **Node.js**, it features real-time power flow visualization, a decentralized marketplace for local energy sharing, and secure Razorpay payment integration with hardware interlocks.
 
 ## Problem
 Households with solar panels often generate excess energy that goes to waste or is sold back to the main utility grid at very low rates. Conversely, neighbors without sufficient generation are forced to pay high utility rates for their power.
@@ -10,31 +10,40 @@ SolarShare creates a localized micro-grid marketplace. It allows neighbors to bu
 
 ## Features
 - **Real-Time Dashboard**: Live monitoring of solar generation, home consumption, and battery storage.
-- **Hardware Telemetry**: Visualizes live hardware status (contactor states, system modes like P2P or GRID).
+- **Hardware Telemetry**: Visualizes actual hardware status (contactor states, system modes like P2P or GRID).
 - **P2P Energy Trading**: A marketplace to broadcast energy requests and submit dynamic pricing offers.
-- **Energy Wallet**: Real-time tracking of energy credits earned and spent during P2P transfers.
-- **Asynchronous Hardware Simulation**: Includes a Node.js simulator (`simulateHardware.js`) that acts as a digital twin for ESP32 microcontrollers, mocking live hardware telemetry.
-
-## Tech Stack
-- **Frontend**: React Native, Expo, Expo Router
-- **Backend & Database**: Firebase Firestore, Firebase Auth
-- **Animations**: React Native Reanimated
-- **Hardware Simulation / IoT**: Node.js (Digital Twin), C++ (ESP32 Firmware)
+- **Secure Payments**: Razorpay integration with idempotent webhooks and secure backend wallet settlement.
+- **Hardware Interlocks**: The app does not assume success. It waits for actual ESP32/PLC physical switching confirmation before settling funds.
 
 ## Architecture
-The application relies on real-time data synchronization via Firebase WebSockets (`onSnapshot`). 
-1. **IoT Nodes**: The `firmware/` directory contains C++ ESP32 code that reads physical sensors, actuates relays, and patches Firestore.
-2. **Simulator**: For local UI testing without physical hardware, `simulateHardware.js` mimics the ESP32s, pushing mock telemetry to Firestore.
-3. **Mobile App**: Subscribes to Firestore documents to visualize live power flow.
-4. **P2P Engine**: When a trade is initiated, the mobile app orchestrates a multi-step Firestore transaction. It waits for hardware contactor switching confirmation before atomically settling the users' wallets.
+
+### Mobile Application
+- **Framework**: React Native + Expo
+- **Routing**: Expo Router
+- **State Management**: React Context, Firebase Realtime Sync
+
+### Backend / Server
+- **Platform**: Node.js + Express
+- **Role**: Validates Razorpay payments securely. Idempotent webhook handling. Settles ledger balances securely via Firebase Admin SDK upon hardware confirmation.
+
+### Database
+- **Platform**: Firebase Firestore
+- **Security Rules**: Locked down to prevent client-side wallet edits. All state mutations for transfers occur securely via the backend.
+
+### Hardware (Physical Gateway & Safety)
+- **IoT Gateway**: ESP32 for Firebase telemetry, heartbeat, and command ingestion.
+- **Safety**: Crouzet Millenium 3 PLC for physical safety checks and relay switching.
+- **Sensors**: ACS712 (Current), ZMPT101B (Voltage) [Hardware Team Pending]
 
 ## Project Structure
 - `app/`: Expo Router application screens (UI).
 - `src/components/`: Reusable React components and Animated UI elements.
 - `src/services/`: Core business logic, Firebase abstractions, and P2P request workflows.
+- `backend/`: Node.js Express server for secure payments and hardware event settlement.
 - `firmware/`: C++ firmware for ESP32 microcontrollers.
-- `simulateHardware.js`: Standalone IoT simulator script for software testing.
+- `scripts/simulator/`: Contains `simulateHardware.js` strictly for isolated local UI testing without physical hardware.
 - `firestore.rules`: Database access and security rules.
+- `docs/`: Architecture, Hardware Integration, Payment Flow, and Failure Handling documentation.
 
 ## Installation
 
@@ -48,22 +57,28 @@ The application relies on real-time data synchronization via Firebase WebSockets
    git clone <repository-url>
    cd smartgrid-app
    ```
-2. Install dependencies:
+2. Install dependencies for mobile and backend:
    ```bash
    npm install
+   cd backend && npm install
    ```
 
 ## Running Locally
 
-To run the full simulation locally, you must run both the mobile app and the hardware simulator simultaneously.
-
-### 1. Start the Hardware Simulator
-This script mimics live ESP32 microcontrollers reporting house metrics and main grid contactor states.
+### 1. Start the Backend Server
+This handles payments and hardware event processing.
 ```bash
-node simulateHardware.js
+cd backend
+npm start
 ```
 
-### 2. Start the Mobile App
+### 2. Start the Hardware Simulator (For UI testing only)
+If real hardware is not connected, use the simulator to mock ESP32 telemetry.
+```bash
+node scripts/simulator/simulateHardware.js
+```
+
+### 3. Start the Mobile App
 In a separate terminal, start the Expo development server:
 ```bash
 npm start
@@ -81,12 +96,3 @@ npm run demo:bootstrap
 - House A: `h1.demo@solarshare.com` (Password: `password123`)
 - House B: `h2.demo@solarshare.com` (Password: `password123`)
 - House C: `h3.demo@solarshare.com` (Password: `password123`)
-
-## Limitations
-- **Hardware Integration**: The current implementation simulates hardware telemetry. Physical ESP32 integration would require replacing the Node.js script with C++ firmware.
-- **Client-Side Settlements**: Currently, energy trading wallets are settled via client-side Firestore transactions. In a production environment, this logic must be moved to secure server-side infrastructure (e.g., Firebase Cloud Functions) to prevent malicious client manipulation.
-
-## Future Improvements
-- Migration of wallet transactions to Firebase Cloud Functions.
-- Implementation of pagination for the transaction history feed.
-- Persistent environment variables for Firebase configuration.

@@ -16,43 +16,57 @@ service cloud.firestore {
 
     // ── users ─────────────────────────────────────────────────────────────────
     match /users/{userId} {
-      allow read, update, delete: if isOwner(userId);
+      // Client cannot modify walletBalance directly
+      allow update: if isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['walletBalance']));
+      allow read: if isOwner(userId) || signedIn();
       allow create: if signedIn();
     }
 
     // ── houses ────────────────────────────────────────────────────────────────
     match /houses/{houseId} {
       allow read: if signedIn();
-      allow create, update: if signedIn();
-      allow delete: if false;
+      // In production, houses are updated by ESP32/Backend, not client.
+      allow create, update: if false; 
     }
 
     // ── system (grid_state) ───────────────────────────────────────────────────
     match /system/{docId} {
       allow read: if signedIn();
-      allow write: if signedIn(); // For simulator/tests
+      allow write: if false; // Must be updated by ESP32/Backend Admin
     }
 
     // ── hardware integration ──────────────────────────────────────────────────
     match /hardware_events/{eventId} {
-      allow read, create: if signedIn();
+      allow read: if signedIn();
+      allow create, update, delete: if false; // Admin only
     }
     match /hardware_commands/{cmdId} {
-      allow read, create, update: if signedIn();
+      allow read: if signedIn();
+      allow create, update, delete: if false; // Created by Backend
     }
 
     // ── requests & offers (Phase 2 & 3) ───────────────────────────────────────
     match /energy_requests/{reqId} {
-      allow read, create, update: if signedIn();
+      allow read, create: if signedIn();
+      allow update: if signedIn() && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status']));
     }
     match /broadcast_requests/{reqId} {
-      allow read, create, update: if signedIn();
+      allow read, create: if signedIn();
+      allow update: if signedIn() && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'selectedOfferId']));
     }
     match /energy_offers/{offerId} {
-      allow read, create, update: if signedIn();
+      allow read, create: if signedIn();
+      allow update: if signedIn() && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status']));
     }
     match /transfer_sessions/{sessionId} {
-      allow read, create, update: if signedIn();
+      allow read: if signedIn();
+      allow create, update, delete: if false; // Backend only
+    }
+
+    // ── payments ─────────────────────────────────────────────────────────────
+    match /payments/{paymentId} {
+      allow read: if signedIn() && (resource.data.receiverId == request.auth.uid || resource.data.donorId == request.auth.uid);
+      allow create, update, delete: if false; // Backend only
     }
 
     // ── transactions ──────────────────────────────────────────────────────────
@@ -62,18 +76,17 @@ service cloud.firestore {
                       || resource.data.receiverUserId == request.auth.uid
                       || resource.data.donor_id == request.auth.uid
                       || resource.data.receiver_id == request.auth.uid);
-      allow create: if signedIn();
-      allow update: if false;
-      allow delete: if false;
+      allow create, update, delete: if false; // Backend only
     }
 
     // ── notifications ─────────────────────────────────────────────────────────
     match /notifications/{noteId} {
       allow read: if signedIn()
                   && resource.data.userId == request.auth.uid;
-      allow create: if signedIn();
+      allow create: if false; // Backend only
       allow update: if signedIn()
-                    && resource.data.userId == request.auth.uid;
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
       allow delete: if false;
     }
   }

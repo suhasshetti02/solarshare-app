@@ -300,44 +300,8 @@ export default function DashboardScreen() {
     return () => { unsubOut(); unsubActive(); unsubOpen(); unsubTransfer(); };
   }, [uid]);
 
-  // Hardware handshake integration
-  useEffect(() => {
-    if (gridState?.switching_confirmed && activeTransferSession && activeTransferSession.status === 'transferring') {
-      const timer = setTimeout(async () => {
-        try {
-          const { updateDoc } = await import("firebase/firestore");
-          await updateDoc(doc(db, "transfer_sessions", activeTransferSession.id), {
-            status: "hardware_confirmed",
-            switchingConfirmed: true,
-          });
-        } catch (err) {
-          console.error("Hardware confirmation error", err);
-        }
-      }, 4000); // 4 seconds animation delay
-      return () => clearTimeout(timer);
-    }
-  }, [gridState?.switching_confirmed, activeTransferSession]);
-
-
-  const completeTransferRef = useRef<boolean>(false);
-
-  useEffect(() => {
-    if (activeTransferSession?.status === 'hardware_confirmed' && !completeTransferRef.current) {
-      completeTransferRef.current = true;
-      const completeTransfer = async () => {
-        try {
-          const { completeTransferSession } = await import("../../src/services/requestService");
-          await completeTransferSession(activeTransferSession.id);
-          showToast("Transfer completed and settled!", "success");
-        } catch (e: any) {
-          showToast(e.message || "Failed to complete transfer", "error");
-        } finally {
-          completeTransferRef.current = false;
-        }
-      };
-      completeTransfer();
-    }
-  }, [activeTransferSession?.status]);
+  // Hardware confirmation and settlement are now handled securely by the backend and actual ESP32 telemetry.
+  // The client merely listens to changes in `activeTransferSession.status` and `gridState`.
 
 
   const metrics = useMemo(() => {

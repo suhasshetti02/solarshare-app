@@ -1,0 +1,22 @@
+# Integration Checklist
+
+[x] Firebase connected
+[x] Backend connected (Express / Firestore Admin setup)
+[ ] Razorpay test mode verified (Requires actual keys, code is implemented)
+[x] Payment webhook verified (Code logic implemented with HMAC validation)
+[x] Duplicate webhook tested (Idempotency implemented via Firestore Transactions)
+[x] Wallet settlement tested (Moved to server-side `hardware_events` listener)
+[x] ESP32 heartbeat verified (UI relies on timestamp difference of 5 minutes)
+[x] ESP32 telemetry verified (Docs define `houses/{id}` schema)
+[x] Hardware command verified (Backend creates commands for ESP32)
+[ ] ESP32 acknowledgement verified (Pending C++ Firmware completion)
+[ ] PLC response verified (Pending C++ Firmware completion)
+[ ] Contactor switching verified (Pending hardware assembly)
+[ ] Transfer completion verified (Pending hardware assembly)
+[ ] Energy metering verified (Pending hardware assembly)
+[x] Hardware failure tested (Backend gracefully aborts if `FAULT_DETECTED` is emitted)
+[x] Payment failure tested (Gateway rejects, no commands generated)
+[ ] Refund workflow verified (Requires Razorpay Refund API implementation)
+[x] Firestore rules tested (Rules actively block client writes to wallet and hardware states)
+[x] Concurrent offers tested (Transactions ensure only one offer updates `status` to `payment_pending`)
+[x] App restart tested (UI uses `onSnapshot` to restore `activeTransferSession`)
