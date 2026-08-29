@@ -2,6 +2,8 @@
 
 A production-ready mobile application for real-time monitoring and peer-to-peer (P2P) trading within a smart grid energy network. Built with **React Native (Expo)**, **Firebase**, and **Node.js**, it features real-time power flow visualization, a decentralized marketplace for local energy sharing, and secure Razorpay payment integration with hardware interlocks.
 
+### [📸 View Project Results & Screenshots](./results)
+
 ## Problem
 Households with solar panels often generate excess energy that goes to waste or is sold back to the main utility grid at very low rates. Conversely, neighbors without sufficient generation are forced to pay high utility rates for their power.
 
