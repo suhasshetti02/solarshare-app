@@ -4,6 +4,20 @@ A production-ready mobile application for real-time monitoring and peer-to-peer 
 
 ### [📸 View Project Results & Screenshots](./results)
 
+## Screenshots
+
+<p align="center">
+  <img src="results/04_home_power_flow.jpg" width="49%" alt="SolarShare home power flow dashboard"/>
+  <img src="results/02_wallet_balance.jpg" width="49%" alt="SolarShare wallet balance"/>
+</p>
+<p align="center">
+  <img src="results/01_transaction_history.jpg" width="49%" alt="SolarShare transaction history"/>
+  <img src="results/07_submit_offer_modal.jpg" width="49%" alt="SolarShare energy offer form"/>
+</p>
+<p align="center">
+  <img src="results/09_physical_hardware_setup.jpg" width="80%" alt="SolarShare physical hardware setup"/>
+</p>
+
 ## Problem
 Households with solar panels often generate excess energy that goes to waste or is sold back to the main utility grid at very low rates. Conversely, neighbors without sufficient generation are forced to pay high utility rates for their power.
 
