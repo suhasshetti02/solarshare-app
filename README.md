@@ -1,100 +1,96 @@
-# Smart Grid Energy (SolarShare)
+# SolarShare — Smart Grid Energy Sharing
 
-A production-ready mobile application for real-time monitoring and peer-to-peer (P2P) trading within a smart grid energy network. Built with **React Native (Expo)**, **Firebase**, and **Node.js**, it features real-time power flow visualization, a decentralized marketplace for local energy sharing, and secure Razorpay payment integration with hardware interlocks.
+SolarShare is an Expo / React Native application prototype for monitoring household energy and coordinating peer-to-peer energy requests and offers. Firebase is used for real-time application data, while an Express backend handles payment and hardware-event settlement workflows.
 
-### [📸 View Project Results & Screenshots](./results)
+> **Project status:** IoT / smart-grid prototype. The repository includes mobile UI, Firebase services, an Express payment backend, ESP32 firmware, and a hardware simulator. Physical switching still depends on the configured ESP32 / PLC integration; the local simulator is not proof of a deployed utility-grid connection.
 
-## Problem
-Households with solar panels often generate excess energy that goes to waste or is sold back to the main utility grid at very low rates. Conversely, neighbors without sufficient generation are forced to pay high utility rates for their power.
+## Main workflows
 
-## Solution
-SolarShare creates a localized micro-grid marketplace. It allows neighbors to buy and sell energy directly from one another. By matching surplus generation with local demand, it maximizes renewable energy usage and provides financial benefits to both buyers and sellers.
+- Household dashboard for generation, consumption, battery, and system state.
+- User and household context, authentication, and connectivity state.
+- Direct energy requests and broadcast requests.
+- Donor energy offers and receiver offer acceptance.
+- Live request / offer updates through Firestore listeners.
+- Razorpay order creation and webhook processing in the backend.
+- Hardware command and event records used to coordinate transfer state.
+- Backend wallet settlement only after a hardware-completion event is received.
+- A JavaScript simulator for exercising the hardware workflow without physical equipment.
 
-## Features
-- **Real-Time Dashboard**: Live monitoring of solar generation, home consumption, and battery storage.
-- **Hardware Telemetry**: Visualizes actual hardware status (contactor states, system modes like P2P or GRID).
-- **P2P Energy Trading**: A marketplace to broadcast energy requests and submit dynamic pricing offers.
-- **Secure Payments**: Razorpay integration with idempotent webhooks and secure backend wallet settlement.
-- **Hardware Interlocks**: The app does not assume success. It waits for actual ESP32/PLC physical switching confirmation before settling funds.
+## Architecture and technology
 
-## Architecture
+| Layer | Technologies |
+|---|---|
+| Mobile app | React Native, Expo SDK 54, Expo Router, TypeScript |
+| Client state / navigation | React Context, React Navigation, AsyncStorage |
+| Backend | Node.js, Express, Firebase Admin SDK |
+| Data | Firebase Firestore |
+| Payments | Razorpay order and webhook integration |
+| Hardware | ESP32 firmware (C++), Crouzet Millenium 3 PLC integration documented in hardware notes |
+| Local testing | `scripts/simulator/simulateHardware.js` |
 
-### Mobile Application
-- **Framework**: React Native + Expo
-- **Routing**: Expo Router
-- **State Management**: React Context, Firebase Realtime Sync
+## Repository map
 
-### Backend / Server
-- **Platform**: Node.js + Express
-- **Role**: Validates Razorpay payments securely. Idempotent webhook handling. Settles ledger balances securely via Firebase Admin SDK upon hardware confirmation.
+- `app/` — Expo Router screens and routes.
+- `src/components/` — reusable UI components and energy-flow widgets.
+- `src/context/` — authentication, connectivity, and energy context.
+- `src/services/` — Firebase, energy, request, hardware, and initialization services.
+- `backend/server.js` — Express API for payment and settlement events.
+- `firmware/` — ESP32 firmware and firmware notes.
+- `scripts/simulator/` — local hardware-event simulator.
+- `docs/` — architecture, hardware integration, payment flow, failure handling, and integration checklist.
+- `firestore.rules` — Firestore access rules.
 
-### Database
-- **Platform**: Firebase Firestore
-- **Security Rules**: Locked down to prevent client-side wallet edits. All state mutations for transfers occur securely via the backend.
+## Run locally
 
-### Hardware (Physical Gateway & Safety)
-- **IoT Gateway**: ESP32 for Firebase telemetry, heartbeat, and command ingestion.
-- **Safety**: Crouzet Millenium 3 PLC for physical safety checks and relay switching.
-- **Sensors**: ACS712 (Current), ZMPT101B (Voltage) [Hardware Team Pending]
+Requirements: Node.js compatible with the Expo SDK in `package.json`, npm, an Expo-supported device/emulator, and Firebase project configuration.
 
-## Project Structure
-- `app/`: Expo Router application screens (UI).
-- `src/components/`: Reusable React components and Animated UI elements.
-- `src/services/`: Core business logic, Firebase abstractions, and P2P request workflows.
-- `backend/`: Node.js Express server for secure payments and hardware event settlement.
-- `firmware/`: C++ firmware for ESP32 microcontrollers.
-- `scripts/simulator/`: Contains `simulateHardware.js` strictly for isolated local UI testing without physical hardware.
-- `firestore.rules`: Database access and security rules.
-- `docs/`: Architecture, Hardware Integration, Payment Flow, and Failure Handling documentation.
+Mobile application:
 
-## Installation
+```bash
+npm install
+npx expo start
+```
 
-### Prerequisites
-- Node.js (v18+)
-- Expo CLI (`npm install -g expo-cli`)
+Run on Android / iOS / web using the Expo CLI options shown in the terminal.
 
-### Setup
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd smartgrid-app
-   ```
-2. Install dependencies for mobile and backend:
-   ```bash
-   npm install
-   cd backend && npm install
-   ```
+Payment backend:
 
-## Running Locally
-
-### 1. Start the Backend Server
-This handles payments and hardware event processing.
 ```bash
 cd backend
+npm install
 npm start
 ```
 
-### 2. Start the Hardware Simulator (For UI testing only)
-If real hardware is not connected, use the simulator to mock ESP32 telemetry.
+Configure the Firebase Admin credentials and Razorpay environment variables required by `backend/server.js` before using payment routes. See `docs/PAYMENT_FLOW.md`.
+
+For a local workflow without physical hardware, inspect the root scripts and use the dedicated simulator commands:
+
 ```bash
-node scripts/simulator/simulateHardware.js
+npm run demo:seed
+npm run demo:verify
 ```
 
-### 3. Start the Mobile App
-In a separate terminal, start the Expo development server:
-```bash
-npm start
-```
-Use the Expo Go app on your physical device, or press `a` (Android) / `i` (iOS) to run in a simulator.
+The `demo:bootstrap` script also deploys Firestore rules; use it only when you intend to change the configured Firebase project.
 
-## Testing & Demo
+## Important security and correctness notes
 
-You can bootstrap demo data (deploying Firestore rules and creating demo user accounts) by running:
-```bash
-npm run demo:bootstrap
-```
+- The backend currently contains development fallback values for Razorpay keys/webhook secret. Replace them with real secrets in environment variables; never use the fallback values for payments.
+- The Express backend initializes Firebase Admin with a project ID; a service-account credential / workload identity must be configured for the target environment.
+- Firestore security rules are part of the security boundary. Review them against every client write before deploying.
+- The payment webhook must be tested against Razorpay's exact raw request body/signature requirements. Do not assume ordinary parsed JSON serialization is always equivalent to the provider's signed bytes.
+- Client-side request status updates and backend settlement are distinct; do not describe a client state change as proof of physical energy transfer.
+- The simulator is for isolated local testing, not a substitute for a safety-certified hardware interlock.
+- Physical sensors are documented as hardware integration work; do not claim every current reading originates from installed sensors unless that deployment is verified.
 
-**Demo Accounts:**
-- House A: `h1.demo@solarshare.com` (Password: `password123`)
-- House B: `h2.demo@solarshare.com` (Password: `password123`)
-- House C: `h3.demo@solarshare.com` (Password: `password123`)
+## Further reading
+
+- `docs/ARCHITECTURE.md`
+- `docs/HARDWARE_INTEGRATION.md`
+- `docs/PAYMENT_FLOW.md`
+- `docs/FAILURE_HANDLING.md`
+- `docs/INTEGRATION_CHECKLIST.md`
+- `firmware/README.md`
+
+## License
+
+See repository licensing and component terms.
